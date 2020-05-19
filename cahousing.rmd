@@ -1,0 +1,664 @@
+---
+title: "Exploratory Data Analysis of the California Housing Market"
+author: "Glynnis Foley"
+date: "May 19, 2020"
+output:
+  html_document:
+    df_print: paged
+    css: style.css
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r librarieswk2, message=FALSE}
+# Libraries 
+# Needed for analyses within the document
+library(ggplot2)      
+library(GGally)       #for ggpairs
+library(ggthemes)     #for adding a theme to plots
+library(kableExtra)   #for kable tables
+library(tidyr)        #for pivot_longer
+library(plyr)         #for rename
+library(dplyr)        #for inner_join
+library(datasets)     #for iris
+library(cowplot)      #for grid_plot
+library(ggcorrplot)   #for corr
+library(RColorBrewer) #for brewer.pal
+library(stats)        #for hclust
+library(mapdata)      #for map of california
+library(stringr)      #for replacing all string in ocean proximity
+```
+
+# California Housing Data
+
+Housing has been a topic of concern for all Californians due to the rising prices. It leads to the question: why are homes in California so expensive? 
+
+The [California Housing Dataset](https://www.kaggle.com/camnugent/california-housing-prices), seen below, uses information from the 1990 census. We may be able to use the data to develop insight into how housing value is distributed throughout California.
+
+## CA Housing: Overview and Univariate Summaries
+
+The data set contains 10 features of 20,640 observations. Each observation is a single block within California. All of the features are quantitative aside from `ocean_proximity`, which is an integer class of five options: <1 OCEAN (less than a one hour drive to the ocean), INLAND, ISLAND, NEAR BAY, and NEAR OCEAN. `longitude` and `latitude` denote how far west and north the block is respectively. `housing_median_age`, `median_income`, and `median_house_value` are the median ages (years), incomes (10,000 USD), and housing price estimates (USD) for each block. `total_rooms`, `total_bedrooms`, `population`, and `households` reflect the total number of rooms, bedrooms, people, and housing units in each block.
+
+
+```{r}
+# Read in data
+house= read.csv('data/housing.csv')
+
+# Univariate Summaries
+summary(house)
+```
+
+In the summaries it can be seen that the median is slightly to significantly less than the mean (implying the data is skewed right) in the `total_rooms`, `total_bedrooms`, `population`, `households`, and `income` features. The ISLAND category of `Ocean Proximity` is interesting in that it has significantly fewer observations than any of the other categories in the feature. The 'median' features all appear to have abnormally low maximum values: (max(housing_median_ age)= 52; max(median_income)= $150,000; max(median_house_value)=\$500,000).
+
+
+## CA Housing: View the Data
+
+```{r}
+# List of the names in the dataset rewritten in proper grammar for use in tables and graphs throughout the analysis
+hous_nam= c("Longitude", "Latitude", "Housing Median Age", "Total Rooms", "Total Bedrooms", "Population", "Households", "Median Income", "Median House Value", "Ocean Proximity")
+
+#Change the names of each feature for aesthetics
+names(house)<-hous_nam
+
+house$`Ocean Proximity` = house$`Ocean Proximity` %>% 
+  str_replace_all(c("<1H OCEAN"="<1H Ocean", 
+                    "INLAND"="Inland", 
+                    "ISLAND"="Island", 
+                    "NEAR BAY"="Near Bay", 
+                    "NEAR OCEAN"="Near Ocean"))
+
+# Define bootstrap options for kable style tables 
+bootstrap_options = c("striped", "condensed", "hovver")
+
+# Draw a kable style table to show the first six observations in the dataset
+head(house)                         %>%
+  kable(col.names = hous_nam, caption= "CA Housing: First 6 Observations")                           %>%
+  kable_styling(bootstrap_options)  %>%
+  kable_styling(full_width=FALSE)   %>%
+  row_spec(0,
+           background='#000099',
+           color='lightgrey',
+           font_size= '16')         %>% 
+  column_spec(9,
+              bold=TRUE,
+              border_right=TRUE,
+              background='#FFFFCC',
+              color='black')
+
+```
+
+By default the data is organized first by `Ocean Proximity` then by latitude, descending. Aside from the last 4 `Housing Median Age` entries being 52 which supports the hypothesis that there is a cap on the "median" features of the data,there is nothing remarkable about the table.
+
+## CA Housing: Univariate Histograms 
+
+Histograms of each individual feature give a better idea of what the distributions are for each of the features. 
+
+```{r hists, message= FALSE, warning=FALSE}
+#Histograms of each of the individual features
+
+#Declare plot
+house_hist1= ggplot(house) +
+  #specify histogram as the type of plot, specify `housing_median_age` as the feature, set opacity and color./
+  geom_histogram(color="black", aes(x=Longitude), alpha=0.5, fill="skyblue")+
+  #set the title
+  ggtitle("Longitude")+
+  #set the theme of the plot
+  theme_tufte()+
+  #set the axis labels
+  xlab("Longitude")+
+  ylab("Count") +
+  theme(axis.text.x = element_text(angle = 25, hjust = 1))
+
+# The code corresponding to the other 6 histograms are hidden to save space but are almost identical to 'house_hist1'
+# They can be viewed in the RMD file
+```
+
+```{r, message= FALSE, warning=FALSE, echo = FALSE}
+house_hist2= ggplot(house) +
+  geom_histogram(color="black", aes(x=Latitude), alpha=0.5, fill="skyblue")+
+  ggtitle("Latitude") +
+  theme_tufte()+
+  xlab("Latitude")+
+  ylab("Count")+
+  theme(axis.text.x = element_text(angle = 25, hjust = 1))
+
+house_hist3= ggplot(house) +
+  geom_histogram(color="black", aes(x=`Housing Median Age`), alpha=0.5, fill="skyblue")+
+  ggtitle("Housing\nMedian Age") +
+  theme_tufte()+
+  xlab("Age")+
+  ylab("Count")
+  
+house_hist4=  ggplot(house) +
+  geom_histogram(color="black", aes(x=`Total Rooms`), alpha=0.5, fill="skyblue")+
+  ggtitle("Total Rooms") +
+  theme_tufte()+
+  xlab("Rooms")+
+  ylab("Count")+
+  theme(axis.text.x = element_text(angle = 25, hjust = 1))
+
+house_hist5= ggplot(house) +
+  geom_histogram(color="black", aes(x=`Total Bedrooms`), alpha=0.5, fill="skyblue")+
+  ggtitle("Total\nBedrooms") +
+  theme_tufte()+
+  xlab("Bedrooms")+
+  ylab("Count")
+
+house_hist6= ggplot(house) +
+  geom_histogram(color="black", aes(x=Population), alpha=0.5, fill="skyblue")+
+  ggtitle("Population") +
+  theme_tufte()+
+  ylab("Count")+
+  theme(axis.text.x = element_text(angle = 25, hjust = 1))
+
+house_hist7= ggplot(house) +
+  geom_histogram(color="black", aes(x=Households), alpha=0.5, fill="skyblue")+
+  ggtitle("Households") +
+  theme_tufte()+
+  ylab("Count")
+
+house_hist8= ggplot(house) +
+  geom_histogram(color="black", aes(x=`Median Income`), alpha=0.5, fill="skyblue")+
+  ggtitle("Median\nIncome") +
+  theme_tufte()+
+  xlab("Income")+
+  ylab("Count")
+
+house_hist9= ggplot(house) +
+  geom_histogram(color="black", aes(x=`Median House Value`), alpha=0.5, fill="skyblue")+
+  ggtitle("Median House Value")+
+  theme_tufte()+
+  xlab("House Value")+
+  ylab("Count") +
+  theme(axis.text.x = element_text(angle = 25, hjust = 1))+
+  scale_x_continuous(labels = scales::comma)
+```
+
+```{r, warning = FALSE, message= FALSE}
+# Bar chart of ``Ocean Proximity``
+house_bar = ggplot(house) +
+  #Specify type of plot as bar chart (ocean proximity is categorical)
+  geom_bar(aes(x=`Ocean Proximity`), alpha=0.5, fill="skyblue", color="black")+
+  ggtitle("Ocean Proximity") +
+  theme_tufte()+
+  xlab("")+
+  ylab("Count")+
+  #adjust the angle of the x-axis labels so they don't overlap
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#Plot the histograms and boxplots in a 3x3 matrix
+plot_grid(house_hist1, house_hist2, house_hist3, house_hist4, house_hist5, house_hist6, house_hist7, house_hist8, house_hist9, house_bar)
+```
+
+The histograms and bar chart provide a little more insight into the distribution of each of the features. `Housing Median Age` shows mostly randomness although there is a peak at the end providing confirmation that there is a cap on the maximum value for the feature. The other histograms (aside from the geographic ) show the features to be skewed right to some extent. `Median House Value` shows the expected peak on the far right. Surprisingly, `Median Income` does not appear to have the rightmost peak. The `Longitude` and `Laditude` histograms are consistent with what we would expect: Bi-modal peaks centered around the locations of the San Francisco Bay and the Los Angeles areas. The graph shows the presence of more people in Los Angeles than in the San Francisco area. The `Ocean Proximity` bar chart is unremarkable.
+
+## CA Housing: Maps
+
+To get a better idea of how some of these variables are distributed across California, it might be helpful to plot them by longitude and latitude to form a map:
+
+`Ocean Proximity`'s documentation is limited and it is unclear how they determined their categorization. Take a look at how `Ocean Proximity` is plotted below:
+
+```{r house_map_1, warning = FALSE, message = FALSE}
+#Plot of a graphical map using the data
+
+ca_df<-subset(map_data("state"), region == "california")
+ca_base <- ggplot(data = ca_df, mapping = aes(x = long, y = lat)) + 
+  coord_fixed(1.3) + 
+  geom_polygon(colour="black", fill="white")
+
+house_map_1 = ca_base+
+  geom_point(data = house, aes(x=Longitude, y=Latitude, color=`Median House Value`, size=Population), alpha=0.4)+
+  theme_tufte()+
+  xlab("Longitude")+ylab("Latitude")+
+  ggtitle("Map of California: Population and House Value")+
+  scale_color_gradient(low="#CCFFCC", high="#3300CC" )
+
+house_map_2 = ca_base+
+  geom_point(data =house, aes(x = Longitude, y = Latitude, color=`Ocean Proximity`), alpha=0.25, size = 1) +
+  coord_fixed(1.3)+
+  scale_color_manual(values=c("#66CC99","#996633","#FF6666","#CCCC66", "#0066CC"))+
+  theme_tufte()+
+  xlab("Longitude")+ylab("Latitude")+
+  ggtitle("Map of California: Ocean Proximity")
+
+```
+       
+```{r, echo= FALSE}
+house_map_1
+house_map_2
+```
+
+The areas of interest in both of the graphs are made obvious by the first map. We're trying to determine the factors that relate to `Housing Value` so we should focus on are the areas shaded in indigo (upper). They show the  metropolitan parts of California: Los Angeles, San Diego, and the San Francisco Bay. It is unusual that the San Francisco Bay Area has it's own category when Los Angeles and San Diego do not. Although this data may have been taken from the 1990 Census, the `Ocean Proximity` category may have been added subsequently by a third party interested specifically in the Bay Area housing market. Looking at the San Francisco bay area reveals that the houses on the peninsula are categorized as "Near Ocean". With this arbitrary category, the Bay Area housing market is being split into multiple categories. The same is true for the Los Angeles and San Diego metropolitan areas: their data is being divided between "Near Ocean" and "<1H Ocean". From the histograms we know that the Los Angeles are has a significantly higher population than the San Francisco Bay Area. Dividing up the data geographically was a well intended idea, however this data shows clusters, not linear divisions by proximity to ocean. While there does appear to be homes with larger values closer to the ocean, categorizing them by zip-code or county population would likely be more helpful. There are also clusters of higher valued homes within the inland section of California, specifically around Sacramento and Lake Tahoe.
+
+Throughout the remainder of the document, the data will be separated by `Ocean Proximity` to observe any major differences between the categories and to assess the strength of the feature as a predictor for `Median House Value`.
+
+## CA Housing: Summary Table
+
+Before continuing on to more visualizations, it might be helpful to create and observe some proportions between the given features, grouped by `Ocean Proximity`. Some of the proportions may be insightful, some of them may not.
+
+1. pop.hh: Population per number of Households (average number of people per home)
+  
+2. br.hh: Number of bedrooms per number of Households 
+  
+3. r.hh: Number of bedrooms per number of Households 
+  
+4. br.r: Number of bedrooms per number of rooms 
+  
+5. hv.i: House Value per Income 
+  
+We should also consider the median values for each feature, grouped by `Ocean Proximity`.
+
+```{r housing_summary}
+# Medians and Selected Proportions for each `Ocean Proximity` level
+house_sum = house %>% 
+  na.omit() %>% 
+  group_by(`Ocean Proximity`) %>% 
+  mutate(pop.hh = Population/Households,
+         br.hh= `Total Bedrooms`/Households,
+         r.hh= `Total Rooms`/Households,
+         br.r= `Total Bedrooms`/`Total Rooms`,
+         hv.i= `Median House Value`/`Median Income`) 
+
+
+house_summary=house_sum %>% 
+  summarise( "Median House Age"= median(`Housing Median Age`),
+             "Median Rooms"= median(`Total Rooms`),
+             "Median Bedrooms"= median(`Total Bedrooms`),
+             "Median Population"=median(Population),
+             "Median Households"= median(Households),
+             "Median Income"=median(`Median Income`),
+             "Median Population per Households"= median(pop.hh),
+             "Median Bedrooms per Households"=median(br.hh),
+             "Median Rooms per Households"=median(r.hh),
+             "Median Bedrooms per Rooms"=median(br.r),
+             "Median House Value per Income"=median(hv.i),
+             "Median House Value"= median(`Median House Value`),
+             Count=n()) 
+# The code that draws the table has been removed to save space but can be viewed in the RMD file 
+```
+```{r, echo = FALSE}
+house_summary %>%
+  kable(caption = "CA Housing Data: Summary Table")                           %>%
+  kable_styling(bootstrap_options)  %>%
+  kable_styling(full_width=FALSE)   %>%
+  row_spec(0,
+           background='#000099',
+           color='lightgrey',
+           font_size= '16')         %>%
+  column_spec(1) %>% 
+  column_spec(13,
+              bold=TRUE,
+              border_right=TRUE,
+              background='#FFFFCC',
+              color='black')
+```
+
+The summary table shows:
+Median Housing Age: Inland (23) < Near Ocean (29) < <1H Ocean (30) < Near Bay (39) < Island (52)
+
+Median Rooms: ~2100/block
+
+Median Bedrooms: ~450/block
+
+Median Households: ~1100/block
+
+Median Income: ~$30,000
+
+Median Population per Households: ~2.75
+
+Median Bedrooms per Households: ~1.05
+
+Median Rooms per Households: ~5.25
+
+Median Bedrooms per Rooms: ~0.2
+
+Median House Value per Income: ~5 
+
+*Median House Value: ~200K*
+
+The Island category stands out the most in the summary table with several irregular statistics. It's median housing age for the Island category is 52 (the maximum). The Island category stands out with significantly fewer people (733), households (288), and rooms (1675) per block. However, there are more bedrooms per block for the Island category, indicating that these neighborhoods have larger homes than any of the other categories. The median house value (414700) is almost twice that of any of the other categories yet the income for the home owners of island properties is lower than that of any other `Ocean Proximity` category. This may signify that the home owners for island properties may have acquired their houses through inheritance.
+
+The other `Ocean Proximity` categories show more reasonable values. The `Median House Value` for the Inland category  ($100K) is significantly smaller than the other four. This is likely due to low demand for inland homes.
+
+## CA Housing: The Island Category
+
+There are only five observations containing island location data. The Law of Large Numbers does not apply to the distributions of any features within the Island location neighborhoods because of the small sample size. The Island locations are not exemplary of California in general but are worth considering:
+
+```{R}
+
+#Check out housing on islands in CA and they all appear to be on the catalina islands
+house %>% group_by(`Ocean Proximity`) %>% filter(`Ocean Proximity`=="Island")    %>%
+  kable(col.names= hous_nam,
+        caption="Housing Data for California Island Neighborhoods")                           %>%
+  kable_styling(bootstrap_options)  %>%
+  kable_styling(full_width=FALSE)   %>%
+  row_spec(0,
+           background='#000099',
+           color='lightgrey',
+           font_size= '16')         %>% 
+  column_spec(9,
+              bold=TRUE,
+              border_right=TRUE,
+              background='#FFFFCC',
+              color='black')
+
+```
+
+California has numerous islands along it's coast and throughout it's inland water sources. All five blocks (observations) that have been categorized as Island properties are located on Santa Catalina Island, off the coast of Los Angeles. Santa Catalina has seen many occupants in history: for 7,500 years Santa Catalina was inhabited by the Tongva. The island was claimed on behalf of the Spanish Empire when it was discovered by European explorers and overtime, the ownership of Santa Catalina shifted to Mexico, and then to the United States. From the time Santa Catalina was claimed by Spain until the late 1800s, the island was not used by it's owners. Since then Santa Catalina has been utilized by many. Most noticeably, William Wrigley Jr turned it into an attraction by building up the infrastructure in the 1920s. Santa Catalina has been a popular vacation destination in the decades since then although development on the island has been reduced since 1975 when the Catalina Island Conservancy acquired almost 90% of the property on the island. 
+
+California only has one other island with residential properties: Balboa Island, located in Newport Beach. It was likely omitted from the Island category because it is not located in the open ocean. A quick Google search shows the Balboa Island latitude and longitude to be (-117.89, 33.61). Lets take a look:
+
+```{R}
+
+#Check out housing on balboa island in CA
+house %>% filter(Longitude == -117.89 & Latitude == 33.61) %>%      
+  kable(col.names= hous_nam,
+        caption="Housing Data for Balboa Island Neighborhoods")                           %>%
+  kable_styling(bootstrap_options)  %>%
+  kable_styling(full_width=FALSE)   %>%
+  row_spec(0,
+           background='#000099',
+           color='lightgrey',
+           font_size= '16')         %>% 
+  column_spec(9,
+              bold=TRUE,
+              border_right=TRUE,
+              background='#FFFFCC',
+              color='black')
+
+```
+
+
+The fact that Balboa Island was included in the <1H Ocean category instead of the Island category provides evidence that `Ocean Proximity` may have been determined by some arbitrary distances to the shore. The table shows that a lot of the blocks on the island are older and very expensive but the incomes are shockingly low.
+
+[According to the 2000 US Census, Balboa Island was one of the densest communities in Orange County. Approximately 3,000 residents live on just 0.2 square miles (0.52 km2) giving it a population density of 17,621 person per square mile-higher than that of San Francisco.  Despite having some of the country's most expensive homes, most of the dwellings are on small lots. A lot size on Balboa Island is 30 feet x 85 feet. In 2008 teardowns on interior lots of that size were going for $2,000,000.](https://en.wikipedia.org/wiki/Balboa_Island,_Newport_Beach) Many of the lots on the island may be owned by those that have inherited their properties.
+
+## CA Housing: Histograms Grouped by Ocean Proximity
+
+Before viewing the histograms of all features, let's take a look at how facet wrap works with the CA Housing Data.
+
+```{r hists_grouped, warning=FALSE, message=FALSE}
+housevalue_hist<- ggplot(house) + 
+  aes(x=`Median House Value`, fill = `Ocean Proximity`) + 
+  geom_histogram(color="black", alpha=0.5)+
+  facet_wrap(~`Ocean Proximity`)+
+  xlab("House Value")+
+  ylab("Count")+
+  ggtitle("Median House Value Histogram\n(With Facet Wrap)")+
+  scale_fill_brewer(palette = "YlGnBu")+
+  theme_tufte()+
+  theme(axis.text.x = element_text(size= 6, angle = 25, hjust = 1),strip.text = element_text(size=8), legend.position = 'none')+
+  scale_x_continuous(labels = scales::comma)
+
+housevalue_nfw_hist<- ggplot(house) + 
+  aes(x=`Median House Value`, fill = `Ocean Proximity`) + 
+  geom_histogram(color="black", alpha=0.5)+
+  xlab("House Value")+
+  ylab("Count")+
+  ggtitle("Median House Value Histogram")+
+  scale_fill_brewer(palette = "YlGnBu")+
+  theme_tufte()+
+  theme(axis.text.x = element_text(size= 8, angle = 25, hjust = 1), legend.position = 'none')+
+  scale_x_continuous(labels = scales::comma)
+
+plot_grid(house_hist9, housevalue_nfw_hist,housevalue_hist)
+```
+
+The first histogram is the same histogram several sections above. Without using facet wrap it appears that the histograms for each `Ocean Proximity` category are stacked. As we are using the histograms to check the individual shapes of each feature for each category, using facet wrap is the better choice. In spite of the small plot sizes below, it will be easier to see the shapes.
+
+```{r, echo = FALSE}
+age_hist<- ggplot(house) + 
+  aes(x=`Housing Median Age`, fill = `Ocean Proximity`) + 
+  geom_histogram(color="black", alpha=0.5)+
+  facet_wrap(~`Ocean Proximity`)+
+  scale_fill_brewer(palette = "YlGnBu")+
+  xlab("Housing Median Age")+
+  ylab("Count")+
+  ggtitle("Median Housing\nAge Histogram")+
+  theme_tufte()+
+  theme(axis.text.x = element_text(size= 6, angle = 25, hjust = 1), strip.text = element_text(size=6), legend.position='none')
+
+rooms_hist<- ggplot(house) + 
+  aes(x=`Total Rooms`, fill = `Ocean Proximity`) + 
+  geom_histogram(color="black", alpha=0.5)+
+  facet_wrap(~`Ocean Proximity`)+
+  xlab("Rooms")+
+  ylab("Count")+
+  ggtitle("Total Rooms\nHistogram")+
+  scale_fill_brewer(palette = "YlGnBu")+
+  theme_tufte()+
+  theme(axis.text.x = element_text(size= 6, angle = 25, hjust = 1), strip.text = element_text(size=6), legend.position='none')
+
+bedrooms_hist<- ggplot(house) + 
+  aes(x=`Total Bedrooms`, fill = `Ocean Proximity`) + 
+  geom_histogram(color="black", alpha=0.5)+
+  facet_wrap(~`Ocean Proximity`)+
+  xlab("Bedrooms")+
+  ylab("Count")+
+  ggtitle("Total Bedrooms\nHistogram")+
+  scale_fill_brewer(palette = "YlGnBu")+
+  theme_tufte()+
+  theme(axis.text.x = element_text(size= 6, angle = 25, hjust = 1), strip.text = element_text(size=6), legend.position='none')
+
+pop_hist<- ggplot(house) + 
+  aes(x=Population, fill = `Ocean Proximity`) + 
+  geom_histogram(color="black", alpha=0.5)+
+  facet_wrap(~`Ocean Proximity`)+
+  xlab("Population")+
+  ylab("Count")+
+  ggtitle("Total Population\nHistogram")+
+  scale_fill_brewer(palette = "YlGnBu")+
+  theme_tufte()+
+  theme(axis.text.x = element_text(size= 6, angle = 25, hjust = 1),strip.text = element_text(size=6), legend.position='none')
+
+households_hist<- ggplot(house) + 
+  aes(x=Households, fill = `Ocean Proximity`) + 
+  geom_histogram(color="black", alpha=0.5)+
+  facet_wrap(~`Ocean Proximity`)+
+  xlab("Households")+
+  ylab("Count")+
+  ggtitle("Total Households\nHistogram")+
+  scale_fill_brewer(palette = "YlGnBu")+
+  theme_tufte()+
+  theme(axis.text.x = element_text(size= 6, angle = 25, hjust = 1),strip.text = element_text(size=6), legend.position='none')
+
+income_hist<- ggplot(house) + 
+  aes(x=`Median Income`, fill = `Ocean Proximity`) + 
+  geom_histogram(color="black", alpha=0.5)+
+  facet_wrap(~`Ocean Proximity`)+
+  xlab("Income")+
+  ylab("Count")+
+  ggtitle("Median Income\nHistogram")+
+  scale_fill_brewer(palette = "YlGnBu")+
+  theme_tufte()+
+  theme(axis.text.x = element_text(size= 6, angle = 25, hjust = 1),strip.text = element_text(size=6), legend.position='none')
+```
+
+```{r, message = FALSE, warning = FALSE}
+plot_grid(age_hist, rooms_hist, bedrooms_hist, pop_hist, households_hist, income_hist)
+```
+
+Notice that the Island neighborhoods do not show up on the histograms because of the low number if observations. The vast majority of the plots mimic the trends seen in the histograms of the features that have not been separated by `Ocean Proximity`. The only remarkable plot here is the Median Housing Age plot for the Near Bay category. It indicates that most of the older homes in California are located around the San Francisco Bay Area. This is likely due to the [1849 Califonia Gold Rush](https://en.wikipedia.org/wiki/California_Gold_Rush) which attracted people from all over the United States and was centralized in Northern California. In six years (1846-1852), the population of San Francisco grew from 200 to 36,000.
+
+## CA Housing: Boxplots Grouped by Ocean Proximity
+
+```{r boxplots_grouped}
+housevalue_box<- ggplot(house) + 
+  aes(x=`Median House Value`, y=`Ocean Proximity`, fill = `Ocean Proximity`) + 
+  geom_boxplot()+
+  theme_tufte()+
+  scale_fill_brewer(palette = "YlGnBu")+
+  ylab("Count")+
+  xlab("House Value")+
+  ggtitle("Median House Value Boxplot")+
+  theme(legend.position = 'none')+
+  scale_x_continuous(labels = scales::comma)
+```
+
+```{r, echo= FALSE}
+age_box<- ggplot(house) + 
+  aes(x=`Housing Median Age`, y=`Ocean Proximity`, fill = `Ocean Proximity`)+
+  scale_fill_brewer(palette="YlGnBu")+
+  geom_boxplot()+
+  theme_tufte()+
+  ylab("Count") +
+  xlab("Housing Age")+
+  ggtitle("Housing Median Age Boxplot")+
+  theme(legend.position = 'none')
+
+rooms_box<- ggplot(house) + 
+  aes(x=`Total Rooms`, y=`Ocean Proximity`, fill = `Ocean Proximity`) +
+  geom_boxplot()+
+  theme_tufte()+
+  scale_fill_brewer(palette = "YlGnBu")+
+  ylab("Count") +
+  xlab("Total Rooms")+
+  ggtitle("Total Rooms Boxplot")+
+  theme(legend.position = 'none')
+
+bedrooms_box<- ggplot(house) + 
+  aes(x=`Total Bedrooms`, y=`Ocean Proximity`, fill = `Ocean Proximity`) + 
+  geom_boxplot()+
+  theme_tufte()+
+  scale_fill_brewer(palette = "YlGnBu")+
+  ylab("Count")+
+  xlab("Total Bedrooms")+
+  ggtitle("Total Bedrooms Boxplot")+
+  theme(legend.position = 'none')
+
+pop_box<- ggplot(house) + 
+  aes(x=Population, y=`Ocean Proximity`, fill = `Ocean Proximity`) + 
+  geom_boxplot()+
+  theme_tufte()+
+  scale_fill_brewer(palette = "YlGnBu")+
+  ylab("Count")+
+  xlab("Population")+
+  ggtitle("Total Population Boxplot")+
+  theme(legend.position = 'none')
+
+households_box<- ggplot(house) + 
+  aes(x=Households, y=`Ocean Proximity`, fill = `Ocean Proximity`) + 
+  geom_boxplot()+
+  theme_tufte()+
+  scale_fill_brewer(palette = "YlGnBu")+
+  ylab("Count")+
+  xlab("Households")+
+  ggtitle("Total Households Boxplot")+
+  theme(legend.position = 'none')
+
+income_box<- ggplot(house) + 
+  aes(x=`Median Income`, y=`Ocean Proximity`, fill = `Ocean Proximity`) + 
+  geom_boxplot()+
+  theme_tufte()+
+  scale_fill_brewer(palette = "YlGnBu")+
+  xlab("Income")+
+  ylab("Count")+
+  ggtitle("Median Income Boxplot")+
+  theme(legend.position = 'none')
+```
+
+```{r, message = FALSE, warning=FALSE}
+housevalue_box
+plot_grid(age_box, rooms_box, bedrooms_box, pop_box, households_box, income_box, ncol=2)
+```
+
+Both the box plots and histograms confirm that all of the features except for `Median House Value` and `Housing Median Age`are skewed right to some extent. The `Median House Value` box plot shows a skew right for the Inland `Ocean Proximity` category. Most of the houses with lower values are located Inland as seen in the [House Value + Population Map](# CA Housing: Maps) however there are still a skew right showing a presence of higher value homes in the category. To get a better idea of where some of the more unusual data might be coming from, the present day information on the location of these blocks is below:
+
+
+1) `Population`
+i) ==3: Mall, North Los Angeles. Possibly security guards or live-in storekeepers (med(income)=5.3K)
+ii) ==35682: Camp Pendelton Marine Corps Base
+iii) ==28566: Currently CSU Monterey Bay (est. 1994), formerly Fort Ord
+
+2) `Total Rooms`
+i) ==2: Red Rock State Park. Possibly Park Rangers 
+ii) ==39320: Low income suburb, Sacramento
+
+3) `Total Bedrooms`
+i) ==1: Legion of Honor Art Museum OR Holocaust Memorial (SF)
+ii) ==6445: Currently CSU Monterey Bay (est. 1994), formerly Fort Ord
+
+4) MAX(`Median Income`)=$150,000 (49 counts)
+5) MAX(`Median House Value`)= $500,001 (965 counts)
+6) MAX(`Housing Median Age`)= 52 (est. 1938) (1273 counts)
+
+In other words, many of the low and high values of the housing features (rooms, bedrooms, population, households) are due to uncommon living situations such as camps/schools (high), or people who live on company premises such as malls/museums (low).
+
+This data also caps off at a maximum median income of 150,000 (USD)/block and maximum median home value of 500,001 (USD)/block resulting in the extra rightmost peak present in the median house value histograms (mildly present in the median income histograms as well).
+
+## CA Housing: Pairs Plot
+
+```{r pairs_house, eval= FALSE, warning=FALSE, message=FALSE}
+pairs_house=house %>%  ggpairs(columns=1:9,
+                  upper=list(continuous="density", combo="box"),
+                  lower = list(continuous="smooth", combo= "circle"),
+                  title="Pairs Plot for Housing Dataset",
+                  tab = "test",
+                  aes(color=`Ocean Proximity`, alpha=0.3)) +
+  theme_tufte()+
+  theme(text=element_text(size=5))+ 
+  theme(plot.title = element_text(size=15))+
+  theme(axis.text.x = element_text(angle = 25, hjust = 1))+
+  theme(legend.position = 'bottom')
+
+
+pairs_house
+```
+
+The legend for the pairs plot is as follows:
+Island = Green, Inland = Yellow, <1H Ocean = Orange, Near Bay = Blue, Near Ocean = Pink/Purple
+
+The pairs plot shows a few correlations between the features when grouped by `Ocean Proximity` most specifically between `Total Rooms`, `Total Bedrooms`, `Households` and `Population`. It looks like the regressions for the <1H Ocean category are being significantly impacted by the two military bases (see `Population`,`Median Income`, and `Median House Value`). These observations are clearly outliers/high leverage points and it might be worth while to remove them from the data set before attempting to model it. In addition, the plots show that using something other than simple linear regression or preforming transformations on some of the features might be necessary to more clearly show their relationships. The plots for `Longitude` and `Latitude` are negatively correlated and the plots of the two form the shape of California. The density and scatter plots for `Median Income` and `Median House Value` show a slight positive correlation between the features. It appears that those with higher incomes tend to have higher-valued homes although those with lower incomes have homes of all possible values.
+
+
+## CA Housing: Correlation Plot
+
+```{r corr}
+#Correlation Plot
+corr=cor(na.omit(house[1:9]))
+
+corr_house=ggcorrplot(corr,
+           type="lower",
+           outline.col="lightgrey",
+           title= "Correlation Between\n Housing Features",
+           colors= brewer.pal(n=3,name="YlGnBu"))+
+  theme_tufte()+
+  theme(axis.title.x = element_blank(),
+        axis.title.y=element_blank()) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  theme(text=element_text(size=16)) +
+  theme(plot.title=element_text(size=20)) 
+
+corr_house
+```
+
+The correlation plot confirms what we noticed in the pairs plot:
+
+1. `Longitude` and `Latitude` are extremely negatively correlated
+2. `Rooms`, `Bedrooms`, `Population`, and `Households` are extremely positively correlated
+3. `Median House Value` is positively correlated with `Median Income`
+4. All other pairs of features are relatively uncorrelated.
+
+`Housing Median Age` looks like it might be slightly correlated with  `Median House Value` but a check of the pairs plot shows that the features have no association with one another.
+
+##  CA Housing Summary
+
+Overall the information seen in this data set has been very telling of the California housing market of 1990. The data itself had been cleaned and manipulated prior to it's use in this document. Because we don't know how it was manipulated, it leaves some unanswered questions about potential missing values, the true skew of the median features, and how the data was categorized using `Ocean Proximity`.
+
+Regardless, the data set is still usable and provides an excellent example of the importance of exploratory analysis prior to modeling. We were able to get a clear picture of the California housing market with a minimal amount of research along with simple data manipulation and visualizations. 
+
+We were able to observe that many of the features are skewed to the right for relatively normal reasons. There were also two noteworthy outliers/high leverage points that could be problematic if not dealt with properly prior to modeling. The given `Ocean Proximity` category was fun to explore but distribution of homes in California is likely not a good predictor of House Value.
+
+From the maps, we were clearly able to see clusterings of higher home values around California's metropolitan areas like San Francisco, Los Angeles, San Diego, and (to a lesser extent) Sacramento. In addition, popular vacation locations such as Lake Tahoe, Catalina and Balboa islands, and (to a lesser extent) along the California coast.
+
+To adequately model California home values, one might try a clustering algorithm or perhaps transformations on several of the features prior to regression.
+
+### Relevance to Today's Housing Market
+A lot can change in 30 years. The insights gained from this data may not necessarily have any similarity to today's conditions. It is important to check the time series data for state population and home-values to check for any major deviations from the trend. If the data shows that the state has undergone  The population of California has not seen any noteworthy increases or decreases in the past 30 years, [it has been increasing steadily from 1900 (population  $\approx$ 2,000,000 ) to 2020 (population $\approx$ 40,000,000) at an annual rate of increase of about 315,000 people](https://fred.stlouisfed.org/series/CAPOP).  From census data ( [1990, 2020](https://www.census.gov/) ) we also know that the population has increased by approximately 10 million people (or over 34%) in the past 30 years, which fits the trend. While this growth is not unusual, it is still significant enough to where the housing market this data set is based on is likely different than the current California housing dynamic. Any insight gleamed from the analysis above is only gives a hint to what the California housing market looks like today.
+
+
+      
